@@ -82,6 +82,82 @@ app.post("/produtos", (req, res) => {
   });
 });
 
+app.post("/entrada", (req, res) => {
+  const { id_produtos, quantidade } = req.body;
+
+  if (!id_produtos || !quantidade || quantidade <= 0) {
+    return res.status(400).json({ mensagem: "Dados inválidos" });
+  }
+
+  const sqlMovimentacao = `
+    INSERT INTO movimentacoes (dt, tipo, quantidade, id_produtos)
+    VALUES (NOW(), 'Entrada', ?, ?)
+  `;
+
+  db.query(sqlMovimentacao, [quantidade, id_produtos], (erro) => {
+    if (erro) {
+      return res.status(500).json({ mensagem: "Erro ao registrar entrada", erro });
+    }
+
+    const sqlProduto = `
+      UPDATE produtos 
+      SET quantidade = quantidade + ? 
+      WHERE id = ?
+    `;
+
+    db.query(sqlProduto, [quantidade, id_produtos], (erro) => {
+      if (erro) {
+        return res.status(500).json({ mensagem: "Erro ao atualizar estoque", erro });
+      }
+
+      res.status(201).json({ mensagem: "Entrada registrada com sucesso!" });
+    });
+  });
+});
+
+app.get("/valor-total-categorias", (req, res) => {
+  const sql = `
+    SELECT 
+      categoria,
+      SUM(quantidade * valor_unidade) AS valor_total
+    FROM produtos
+    GROUP BY categoria
+  `;
+
+  db.query(sql, (erro, resultado) => {
+    if (erro) {
+      return res.status(500).json({ mensagem: "Erro ao buscar valores", erro });
+    }
+
+    res.json(resultado);
+  });
+});
+
+app.get("/saidas", (req, res) => {
+  const sql = `
+    SELECT 
+      movimentacoes.id,
+      movimentacoes.dt,
+      movimentacoes.tipo,
+      movimentacoes.quantidade,
+      produtos.nome,
+      produtos.categoria
+    FROM movimentacoes
+    INNER JOIN produtos 
+    ON movimentacoes.id_produtos = produtos.id
+    WHERE movimentacoes.tipo = 'Saída'
+    ORDER BY movimentacoes.dt DESC
+  `;
+
+  db.query(sql, (erro, resultado) => {
+    if (erro) {
+      return res.status(500).json({ mensagem: "Erro ao listar saídas", erro });
+    }
+
+    res.json(resultado);
+  });
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
