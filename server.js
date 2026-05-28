@@ -46,40 +46,11 @@ app.get("/produtos", (req, res) => {
 });
 
 app.post("/produtos", (req, res) => {
-  const { nome, quantidade, valor_unidade, categoria } = req.body;
+  const { nome, quantidade, valor_unidade, categoria } = req.body || {};
 
-  // Validação: campos obrigatórios
   if (!nome || quantidade === undefined || valor_unidade === undefined || !categoria) {
     return res.status(400).json({
-      mensagem: "Todos os campos são obrigatórios: nome, quantidade, valor_unidade e categoria."
-    });
-  }
-
-  // Validação: nome
-  if (nome.trim() === "") {
-    return res.status(400).json({
-      mensagem: "O nome do produto não pode estar vazio."
-    });
-  }
-
-  // Validação: quantidade
-  if (isNaN(quantidade) || quantidade < 0) {
-    return res.status(400).json({
-      mensagem: "A quantidade deve ser um número maior ou igual a 0."
-    });
-  }
-
-  // Validação: valor
-  if (isNaN(valor_unidade) || valor_unidade <= 0) {
-    return res.status(400).json({
-      mensagem: "O valor da unidade deve ser um número maior que 0."
-    });
-  }
-
-  // Validação: categoria
-  if (categoria.trim() === "") {
-    return res.status(400).json({
-      mensagem: "A categoria não pode estar vazia."
+      mensagem: "Envie nome, quantidade, valor_unidade e categoria no corpo da requisição."
     });
   }
 
