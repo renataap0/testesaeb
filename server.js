@@ -18,40 +18,30 @@ const db = mysql.createConnection({
 });
 
 db.connect((erro) => {
-  if (erro) {
-    console.error("Erro ao conectar com o banco de dados:", erro);
-    return;
-  }
-
-  console.log("Conectado ao banco de dados MySQL!");
+  if (erro) return console.log("Erro ao conectar:", erro);
+  console.log("Banco conectado!");
 });
 
+const erroBanco = (res, erro) => {
+  res.status(500).json({ erro: erro.message });
+};
+
 app.get("/", (req, res) => {
-  res.send("API de estoque funcionando!");
+  res.send("API funcionando!");
 });
 
 app.get("/produtos", (req, res) => {
-  const sql = "SELECT * FROM produtos";
-
-  db.query(sql, (erro, resultados) => {
-    if (erro) {
-      return res.status(500).json({
-        mensagem: "Erro ao buscar produtos",
-        erro: erro
-      });
-    }
-
-    res.status(200).json(resultados);
+  db.query("SELECT * FROM produtos", (erro, resultado) => {
+    if (erro) return erroBanco(res, erro);
+    res.json(resultado);
   });
 });
 
 app.post("/produtos", (req, res) => {
   const { nome, quantidade, valor_unidade, categoria } = req.body || {};
 
-  if (!nome || quantidade === undefined || valor_unidade === undefined || !categoria) {
-    return res.status(400).json({
-      mensagem: "Envie nome, quantidade, valor_unidade e categoria no corpo da requisição."
-    });
+  if (!nome || quantidade == null || valor_unidade == null || !categoria) {
+    return res.status(400).json({ erro: "Dados inválidos" });
   }
 
   const sql = `
@@ -59,101 +49,146 @@ app.post("/produtos", (req, res) => {
     VALUES (?, ?, ?, ?)
   `;
 
-  const valores = [nome, quantidade, valor_unidade, categoria];
-
-  db.query(sql, valores, (erro, resultado) => {
-    if (erro) {
-      return res.status(500).json({
-        mensagem: "Erro ao cadastrar produto.",
-        erro: erro
-      });
-    }
+  db.query(sql, [nome, quantidade, valor_unidade, categoria], (erro, resultado) => {
+    if (erro) return erroBanco(res, erro);
 
     res.status(201).json({
-      mensagem: "Produto cadastrado com sucesso!",
-      produto: {
-        id: resultado.insertId,
-        nome,
-        quantidade,
-        valor_unidade,
-        categoria
-      }
+      mensagem: "Produto cadastrado!",
+      id: resultado.insertId
     });
   });
 });
 
 app.post("/entrada", (req, res) => {
-  const { id_produtos, quantidade } = req.body;
+  const { id_produtos, quantidade } = req.body || {};
 
   if (!id_produtos || !quantidade || quantidade <= 0) {
-    return res.status(400).json({ mensagem: "Dados inválidos" });
+    return res.status(400).json({ erro: "Dados inválidos" });
   }
 
-  const sqlMovimentacao = `
+  const sqlEntrada = `
     INSERT INTO movimentacoes (dt, tipo, quantidade, id_produtos)
     VALUES (NOW(), 'Entrada', ?, ?)
   `;
 
-  db.query(sqlMovimentacao, [quantidade, id_produtos], (erro) => {
-    if (erro) {
-      return res.status(500).json({ mensagem: "Erro ao registrar entrada", erro });
-    }
+  db.query(sqlEntrada, [quantidade, id_produtos], (erro) => {
+    if (erro) return erroBanco(res, erro);
 
-    const sqlProduto = `
-      UPDATE produtos 
-      SET quantidade = quantidade + ? 
+    const sqlAtualizar = `
+      UPDATE produtos
+      SET quantidade = quantidade + ?
       WHERE id = ?
     `;
 
-    db.query(sqlProduto, [quantidade, id_produtos], (erro) => {
-      if (erro) {
-        return res.status(500).json({ mensagem: "Erro ao atualizar estoque", erro });
-      }
+    db.query(sqlAtualizar, [quantidade, id_produtos], (erro) => {
+      if (erro) return erroBanco(res, erro);
 
-      res.status(201).json({ mensagem: "Entrada registrada com sucesso!" });
+      res.status(201).json({ mensagem: "Entrada registrada!" });
     });
   });
 });
 
 app.get("/valor-total-categorias", (req, res) => {
   const sql = `
-    SELECT 
-      categoria,
-      SUM(quantidade * valor_unidade) AS valor_total
+    SELECT categoria, SUM(quantidade * valor_unidade) AS valor_total
     FROM produtos
     GROUP BY categoria
   `;
 
   db.query(sql, (erro, resultado) => {
-    if (erro) {
-      return res.status(500).json({ mensagem: "Erro ao buscar valores", erro });
-    }
-
+    if (erro) return erroBanco(res, erro);
     res.json(resultado);
   });
 });
 
 app.get("/saidas", (req, res) => {
   const sql = `
-    SELECT 
-      movimentacoes.id,
-      movimentacoes.dt,
-      movimentacoes.tipo,
-      movimentacoes.quantidade,
-      produtos.nome,
-      produtos.categoria
-    FROM movimentacoes
-    INNER JOIN produtos 
-    ON movimentacoes.id_produtos = produtos.id
-    WHERE movimentacoes.tipo = 'Saída'
-    ORDER BY movimentacoes.dt DESC
+    SELECT m.id, m.dt, m.tipo, m.quantidade, p.nome, p.categoria
+    FROM movimentacoes m
+    JOIN produtos p ON m.id_produtos = p.id
+    WHERE m.tipo = 'Saída'
+    ORDER BY m.dt DESC
   `;
 
   db.query(sql, (erro, resultado) => {
-    if (erro) {
-      return res.status(500).json({ mensagem: "Erro ao listar saídas", erro });
-    }
+    if (erro) return erroBanco(res, erro);
+    res.json(resultado);
+  });
+});
 
+app.get("/produtos/limites", (req, res) => {
+  const sql = `
+    SELECT 
+      id,
+      nome,
+      quantidade,
+      CASE
+        WHEN quantidade <= 0 THEN 'Limite mínimo'
+        WHEN quantidade >= 100 THEN 'Limite máximo'
+        ELSE 'Normal'
+      END AS situacao,
+      quantidade AS percentual_nivel
+    FROM produtos
+    ORDER BY quantidade ASC
+  `;
+
+  db.query(sql, (erro, resultado) => {
+    if (erro) return erroBanco(res, erro);
+    res.json(resultado);
+  });
+});
+
+app.get("/movimentacoes/periodo", (req, res) => {
+  const { dataInicial, dataFinal } = req.query;
+
+  if (!dataInicial || !dataFinal) {
+    return res.status(400).json({ erro: "Informe dataInicial e dataFinal" });
+  }
+
+  const sql = `
+    SELECT
+      p.nome AS nome_produto,
+      'unidade' AS unidade_medida,
+      SUM(CASE WHEN m.tipo = 'Entrada' THEN m.quantidade ELSE 0 END) AS total_entradas,
+      SUM(CASE WHEN m.tipo = 'Saída' THEN m.quantidade ELSE 0 END) AS total_saidas,
+      SUM(CASE WHEN m.tipo = 'Entrada' THEN m.quantidade ELSE -m.quantidade END) AS saldo_periodo,
+      SUM(CASE WHEN m.tipo = 'Entrada' THEN m.quantidade * p.valor_unidade ELSE 0 END) AS valor_entradas,
+      SUM(CASE WHEN m.tipo = 'Saída' THEN m.quantidade * p.valor_unidade ELSE 0 END) AS valor_saidas
+    FROM movimentacoes m
+    JOIN produtos p ON m.id_produtos = p.id
+    WHERE m.dt >= ? AND m.dt <= ?
+    GROUP BY p.id, p.nome
+    ORDER BY p.nome
+  `;
+
+  db.query(sql, [dataInicial, dataFinal], (erro, resultado) => {
+    if (erro) return erroBanco(res, erro);
+    res.json(resultado);
+  });
+});
+
+app.get("/produtos/maior-saida", (req, res) => {
+  const { dataInicial, dataFinal } = req.query;
+
+  if (!dataInicial || !dataFinal) {
+    return res.status(400).json({ erro: "Informe dataInicial e dataFinal" });
+  }
+
+  const sql = `
+    SELECT
+      p.nome AS nome_produto,
+      SUM(m.quantidade) AS quantidade_total_saida,
+      SUM(m.quantidade * p.valor_unidade) AS valor_total_saidas
+    FROM movimentacoes m
+    JOIN produtos p ON m.id_produtos = p.id
+    WHERE m.tipo = 'Saída'
+    AND m.dt >= ? AND m.dt <= ?
+    GROUP BY p.id, p.nome
+    ORDER BY quantidade_total_saida DESC
+  `;
+
+  db.query(sql, [dataInicial, dataFinal], (erro, resultado) => {
+    if (erro) return erroBanco(res, erro);
     res.json(resultado);
   });
 });

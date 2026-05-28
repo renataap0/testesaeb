@@ -40,3 +40,6 @@ SELECT
 FROM produtos;
 
 SELECT * FROM vw_estoque;
+
+ALTER TABLE produtos
+ADD COLUMN unidade_medida VARCHAR(50) DEFAULT 'unidade';
