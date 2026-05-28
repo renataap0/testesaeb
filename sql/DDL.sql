@@ -6,8 +6,8 @@ CREATE TABLE produtos (
     id INT PRIMARY KEY AUTO_INCREMENT,
     nome VARCHAR(250) NOT NULL,
     quantidade INT NOT NULL,
-    valor_unidade DECIMAL NOT NULL,
-    categoria VARCHAR (250) NOT NULL
+    valor_unidade DECIMAL(10,2) NOT NULL,
+    categoria VARCHAR(250) NOT NULL
 );
 
 CREATE TABLE movimentacoes (
@@ -18,6 +18,16 @@ CREATE TABLE movimentacoes (
     id_produtos INT NOT NULL,
     FOREIGN KEY (id_produtos) REFERENCES produtos(id)
 );
+
+INSERT INTO produtos (nome, quantidade, valor_unidade, categoria) VALUES
+    ("Barra de Chocolate", 52, 8.00, "Alimento"),
+    ("Picanha", 60, 75.00, "Açougue"),
+    ("Barrinha de Cereal", 45, 2.00, "Alimento");
+
+INSERT INTO movimentacoes (dt, tipo, quantidade, id_produtos) VALUES
+    ("2026-03-25", "Entrada", 15, 1),
+    ("2026-02-14", "Saída", 10, 2),
+    ("2026-05-03", "Entrada", 8, 3);
 
 CREATE OR REPLACE VIEW vw_estoque AS
 SELECT
